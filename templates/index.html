@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+
+    <title>Radar</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.1.1/d3.min.js"></script>
+</head>
+<body>
+    <img src="/map/de_nuke_radar.png" id="map" width="1024" height="1024" style="position:absolute;">
+    <canvas id="radar" width="1024" height="1024" style="z-index:1000;position:relative;" />
+</body>
+<script>
+
+    var socket = io();
+    
+    const canvas = document.getElementById("radar");
+    const ctx = canvas.getContext("2d");
+
+    const map = document.getElementById("map");
+
+    const map_path = "/map/";
+
+    // radar images are 1024x1024, we are scaling them down to 512x512
+    const ratio = 1.0;
+
+    let pos_x;
+    let pos_y;
+    let scale;
+
+    let prev_map_name;
+
+    let players;
+
+
+    function update_map_data() {
+        const data_path = "/map_info/" + prev_map_name;
+        fetch(data_path).then((res) => {
+            res.json().then((data) => {
+                pos_x = data.pos_x;
+                pos_y = data.pos_y;
+                scale = data.scale;
+                // console.log('received map_info');
+            });
+        });
+    }
+
+    function draw_entity(x, y, health, r, g, b, a) {
+        ctx.beginPath();
+        ctx.rect(x, y, 10, 10);
+        ctx.fillStyle = `rgb(${ r }, ${ g }, ${ b }, ${ a })`;
+        ctx.fill();
+
+        ctx.font = "12px Arial";
+        ctx.fillText(health, x + 10, y + 10);
+    }
+
+    function clear_canvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function normalize(val, min, max) {
+        const clamped_val = Math.min(Math.max(val, min), max);
+
+        return (clamped_val - min) / (max - min);
+    }
+
+
+    socket.on('message', function(data) {
+        const map_name = data.map_name;
+        if (prev_map_name != map_name) {
+            prev_map_name = map_name;
+            map.src = map_path + map_name + "_radar.png";
+            update_map_data();
+        }
+        players = data.players;
+        clear_canvas();
+        for (let key in players) {
+            //[player_id, team, health, pos_x, pos_y, pos_z, my_flag]
+            const team = players[key][1];
+            const health = players[key][2];
+            const x_position = players[key][3];
+            const y_position = players[key][4];
+            const my_flag = players[key][6];
+
+            if (health > 0){
+                const mapped_x = ((x_position - pos_x) / scale) * ratio;
+                const mapped_y = ((y_position - pos_y) / -scale) * ratio;
+
+                if (my_flag) {
+                    col_red = 255;
+                    col_green = 0;
+                    col_blue = 0;
+                }
+                else if (team == 2) {
+                    col_red = 204;
+                    col_green = 153;
+                    col_blue = 102;
+                }
+                else if (team == 3) {
+                    col_red = 0;
+                    col_green = 0;
+                    col_blue = 255;
+                }
+                else {
+                    col_red = 255;
+                    col_green = 255;
+                    col_blue = 255;
+                }
+
+                draw_entity(mapped_x, mapped_y, health, col_red, col_green, col_blue, 255);
+            }
+        }
+
+    });
+
+</script>
